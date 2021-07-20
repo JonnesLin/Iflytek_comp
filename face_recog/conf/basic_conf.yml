@@ -1,0 +1,43 @@
+# 
+data_root: "data/cifar-10-python"
+
+# basic 
+seed: 66
+
+# configuration of data
+image_size: 384
+channel: 3
+
+# train data augumentation
+train_random_crop: True
+train_random_crop_padding: 16
+train_random_horizontalFlip: True
+train_random_horizontalFlip_prob: 0.5
+train_cifar10_policy: True
+imagenet: True
+train_cutout: True
+train_cutout_n: 1
+train_cutout_length: 64
+train_normlization: "(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)"
+
+# test data augumentation
+test_normlization: "(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)"
+
+# train parameters
+lr: 0.001
+batch_size: 64
+model_name: 'ResNet18'
+resume: False
+temperature: 3.0
+alpha: 0.7
+epoch: 60
+distillation_epoch: 0
+note: 'Face_recog'
+file_name: 'Face_recog'
+dir: 'Face_recog'
+weight_decay: 0.0005
+momentum: 0.9
+eta_min: 0.0
+
+# wandb
+project_name: 'Face_recog'
