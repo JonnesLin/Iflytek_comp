@@ -5,3 +5,5 @@ warmup_scheduler的安装:
 ```
 pip install git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
 ```
+
+如果本地计算资源不足的话，可以尝试将配置文件中的amp(混合精度)设置为True
