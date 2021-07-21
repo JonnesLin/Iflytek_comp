@@ -19,13 +19,10 @@ import yaml
 from double_dataset import DoubleDataset
 import sys
 import imgaug
-
 from typing import Optional, Sequence
-
-import torch
 from torch import Tensor
-from torch import nn
-from torch.nn import functional as F
+from data_process import Face_dataset
+from warmup_scheduler import GradualWarmupScheduler
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
@@ -35,35 +32,37 @@ torch.backends.cudnn.allow_tf32 = True
 warnings.filterwarnings('ignore')
 
 
-# read parameters
-with open('conf/basic_conf.yml') as f:
-    args = yaml.load(f)
-if len(sys.argv) > 1:
-    args['model_name'] = sys.argv[-1]
-    args['project_name'] = sys.argv[-1] + '_VIS_'#  + 'printed'
-''' Preparation '''
-# set seed
-set_seed(args['seed'])
-# set log 
-# log = Log(args)
-# set device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # best test accuracy
 best_acc = 0
 # start from epoch 0 or last checkpoint epoch
 start_epoch = 0
 
-''' Data preparation '''
-print('==> Preparing data...')
-# transforme
+##################
+# Get Parameters #
+##################
+with open('conf/basic_conf.yml') as f:
+    args = yaml.load(f)
+
+
+############
+# set seed #
+############
+set_seed(args['seed'])
+
+
+################
+# Augmentation #
+################
 transform_train = get_train_transform(args)
 transform_test = get_test_transform(args)
 
 def worker_init_fn(worker_id):
     imgaug.seed(np.random.get_state()[1][0] + worker_id)
-    
-from data_process import Face_dataset
 
+##########################
+# Dataset and DataLoader #
+##########################
 trainset = Face_dataset(True, transform_train)
 trainloader = torch.utils.data.DataLoader(
     trainset, batch_size=args['batch_size'], shuffle=True, num_workers=8, pin_memory=True, worker_init_fn=worker_init_fn)
@@ -72,7 +71,9 @@ testset = Face_dataset(False, transform_test)
 testloader = torch.utils.data.DataLoader(
     testset, batch_size=args['batch_size'], shuffle=False, num_workers=8, pin_memory=True)
 
-# set wandb
+#########
+# Wandb #
+#########
 Net_Name = args['project_name']
 checkpoint = args['project_name']
 wandb.init(project=args['project_name'],
@@ -84,32 +85,25 @@ wandb.init(project=args['project_name'],
                "batch_size": args['batch_size']
            })
 
+#########
+# Model #
+#########
 net = get_model('XunFeiNet')
-# net = net.half()
 net = net.to(device)
-# scaler = GradScaler()
 wandb.watch(net)
+
+# AMP if it's necessary(impart performance)
+if args['amp']:
+    scaler = GradScaler()
+
 
 if device == 'cuda':
     net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
-if args['resume']:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    assert os.path.isdir('ResNet18_cifar-100'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./ResNet18_cifar-100/82.31ckpt.pth')
-    net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
-
-
-def criterion(outputs, targets, norm=None):
-    log_softmax_outputs = F.log_softmax(outputs / args['temperature'], dim=1)
-    softmax_targets = F.softmax(targets / args['temperature'], dim=1)
-    return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
-
-
+##################################################
+# Definition of the Focal loss and the Soft Loss #
+##################################################
 class FocalLoss(nn.Module):
     """ Focal Loss, as described in https://arxiv.org/abs/1708.02002.
     It is essentially an enhancement to cross entropy loss and is
@@ -195,19 +189,15 @@ class FocalLoss(nn.Module):
         return loss
 
 def soft_loss(outputs, targets, norm=None):
-    log_softmax_outputs = F.log_softmax(outputs / 1.0, dim=1)
-    softmax_targets = F.softmax(targets / 1.0, dim=1)
+    log_softmax_outputs = F.log_softmax(outputs / args['temperature'], dim=1)
+    softmax_targets = F.softmax(targets / args['temperature'], dim=1)
     return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
 
+#####################################
+# Criterion, Optimizer and Scheduler#
+#####################################
 ce = FocalLoss().cuda()
-# ce = nn.CrossEntropyLoss()
-'''
-optimizer = optim.SGD(net.parameters(), lr=args['lr'], momentum=args['momentum'], weight_decay=args['weight_decay'])
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args['epoch'], eta_min=args['eta_min'])
-'''
-from warmup_scheduler import GradualWarmupScheduler
 optimizer = optim.AdamW(net.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
-# optimizer = optim.SGD(net.parameters(), lr=args['lr'], momentum=args['momentum'], weight_decay=args['weight_decay'])
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args['epoch'], eta_min=args['eta_min'])
 scheduler = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=5, after_scheduler=scheduler)
 
@@ -220,27 +210,33 @@ def train(epoch):
     total = 0
     ensemble_pred_correct = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
-        # inputs = inputs.half()
+        # Get X and Y
         inputs, targets = inputs.to(device), targets.to(device)
-        one_hot_label = (1-0.3)*F.one_hot(targets, num_classes=7) + 0.3/7
+        # To soft  label!
+        one_hot_label = (1-args['alpha'])*F.one_hot(targets, num_classes=args['num_classes']) + args['alpha']/args['num_classes']
         
         optimizer.zero_grad()
         
         outputs = net(inputs)
         ensemble = outputs
-        
+        # The loss includes focal loss and softed loss
         loss = ce(outputs, targets) + soft_loss(outputs, one_hot_label)
         
-        loss.backward()
         
-        # scaler.scale(loss).backward()
-        optimizer.step()
-        # scaler.step(optimizer)
-        # scaler.update()
+        if args['amp']:
+            scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+        if args['amp']:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
+
         train_loss += loss.item()
         _, predicted = outputs.max(1)
         _, ensemble_pred = ensemble.max(1)
-        # _, targets = targets.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
         ensemble_pred_correct += ensemble_pred.eq(targets).sum().item()
@@ -265,7 +261,6 @@ def test(epoch):
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
             
-            # outputs, o1, o2, o3 = net(inputs)
             outputs = net(inputs)
             ensemble = outputs
             
@@ -277,7 +272,7 @@ def test(epoch):
             _, ensemble_pred = ensemble.max(1)
             
             total += targets.size(0)
-            # _, targets = targets.max(1)
+
             correct += predicted.eq(targets).sum().item()
             ensemble_pred_correct += ensemble_pred.eq(targets).sum().item()
 
@@ -303,6 +298,7 @@ def test(epoch):
             os.mkdir(checkpoint)
         torch.save(state, './' + checkpoint + '/' + str(args['project_name']) + 'ckpt.pth')
         best_acc = acc
+
 
 def predict(test_loader, model, tta=10):
     model.eval()
