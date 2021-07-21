@@ -9,3 +9,9 @@ pip install git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
 + vgg, resnet18到efficientnet, swim, vit等模型对整体性能(performance)影响不大，而数据质量对模型表现影响较大
 + 可以尝试在数据质量上做优化: 
   +  使用out of distribution detection相关技术来清理数据
+  +  使用多折交叉验证来保证模型对部分数据不可达，进而辅助数据清理
+  +  使用诸如cleanlab之类的数据清理工具进行清理
+  +  使用蒸馏技术(之后我可能会开源一个自蒸馏的版本)
+  +  引入一些无监督的技巧来辅助清理数据
+  +  多尝试soft label的参数(\alpha)
+  +  To balance the softed loss and the focal loss
