@@ -138,25 +138,4 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-
-def draw_and_save(x, y, data, ent, name='Layer', path="imgs/"):
-    if os.path.exists(path) is False:
-        os.mkdir(path)
-    ent = '%.2f' % ent
-    plt.figure(figsize=(8, 4))
-    sns.barplot(x, y, data=data, color="g")
-
-    plt.xticks([])
-    plt.xlabel('Classes')
-    plt.ylabel('Prob')
-    plt.title(str(name)+ ', ' + 'Entropy:' + str(ent))
-    plt.tight_layout()
-    plt.savefig(os.path.join(path, name), dpi=1000)
-
-def cal_ent_and_draw(result, layer_name):
-    data = result.cpu().float()
-    ent = -torch.sum(F.softmax(data) * F.log_softmax(data)).numpy()
-    pro = F.softmax(data)
-    df = pd.DataFrame(pro.numpy().T, columns=['value'])
-    draw_and_save(df.index, df['value'], df, ent, name=layer_name)
     
