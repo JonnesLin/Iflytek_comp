@@ -9,6 +9,7 @@ pip install git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
 ```
 python main.py
 ```
++ 具体的参数可以通过conf/basic_conf.yml进行修改
 + 如果本地计算资源不足的话，可以尝试将配置文件中的amp(混合精度)设置为True
 + vgg, resnet18到efficientnet, swim, vit等模型对整体性能(performance)影响不大，而数据质量对模型表现影响较大
 + 可以尝试在数据质量上做优化: 
