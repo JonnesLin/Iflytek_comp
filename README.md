@@ -2,6 +2,6 @@
 
 ### Iflytek_comp
 warmup_scheduler的安装:
-'''
+```
 pip install git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
-'''
+```
