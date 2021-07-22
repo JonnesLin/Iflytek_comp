@@ -41,3 +41,6 @@ eta_min: 0.0
 
 # wandb
 project_name: 'Face_recog'
+
+amp: False
+num_classes: 7
