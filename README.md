@@ -22,3 +22,5 @@ python main.py
   +  To balance the softed loss and the focal loss
 + 数据中存在一些水印的问题，可以通过该论文提出的方法进行改善:https://maureenzou.github.io/ddac/ (不过我认为影响不会太大)
 + 数据增强的方式有待探索: 因为数据主要是三通道的灰度图，但是本baseline的数据增强方式比较适用于彩色图；同时数据的分辨率低，所以参赛选手可以多探索一些数据增强的方式
+
+模型更新: reference to https://github.com/phamquiluan/ResidualMaskingNetwork
