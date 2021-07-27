@@ -1,6 +1,20 @@
 近期做了科大讯飞的几个比赛的baseline，其中表情识别是70+，还有两个植物赛道是前十，近期都在这个仓库更新，有兴趣可以留意下
 
 ### Iflytek_comp
+
+结构:
++ conf
+  + basic_conf.yml    配置文件
++ data_process: 数据处理的相关包
+  + __init__.py
+  + autoaugment.py: 数据增强实现
+  + data_transform.py: data transform的定义
+  + face_dataset.py: dataset的实现(根据每个比赛的不同进行更新)
++ models
+  + __init__.py
+  + face_model.py: 模型
++ main.py: main函数
+---
 + warmup_scheduler的安装:
 ```
 pip install git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
